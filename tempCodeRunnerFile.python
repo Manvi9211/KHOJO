@@ -1,0 +1,66 @@
+import pandas as pd
+
+# Load dataset
+df = pd.read_csv("myntra.csv")
+
+# Show first 5 rows
+print(df.head())
+
+# Show columns
+print(df.columns)
+# assuming your dataframe name is df
+df = df[['name', 'price', 'rating', 'seller', 'discount']]
+
+df.head()
+# Check for missing values
+print(df.isnull().sum())
+
+df['price'] = pd.to_numeric(df['price'], errors='coerce')
+df['rating'] = pd.to_numeric(df['rating'], errors='coerce')
+df['discount'] = pd.to_numeric(df['discount'], errors='coerce')
+
+df = df.dropna()
+df = df.reset_index(drop=True)
+df.head()
+
+
+# Create features column
+df['features'] = df['name'] + " " + df['seller']
+
+# Show only important columns
+print(df[['name', 'seller', 'features']].head())
+
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+# Create TF-IDF object
+tfidf = TfidfVectorizer(stop_words='english')
+
+# Convert text to numbers
+tfidf_matrix = tfidf.fit_transform(df['features'])
+
+print(tfidf_matrix.shape)
+
+from sklearn.metrics.pairwise import cosine_similarity
+
+cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
+
+print(cosine_sim.shape)
+
+def recommend(product_name):
+    # Get index of product
+    idx = df[df['name'] == product_name].index[0]
+
+    # Get similarity scores
+    scores = list(enumerate(cosine_sim[idx]))
+
+    # Sort products
+    scores = sorted(scores, key=lambda x: x[1], reverse=True)
+
+    # Get top 5 recommendations (excluding itself)
+    scores = scores[1:6]
+
+    product_indices = [i[0] for i in scores]
+
+    return df['name'].iloc[product_indices]   
+recommend("Men Cotton Pure Cotton T-shirt")

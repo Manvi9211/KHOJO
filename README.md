@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+<!-- <<<<<<< HEAD
 # KHOJO-
 Khojo is a fashion recommender system built with Streamlit and scikit-learn, using TF-IDF and cosine similarity to suggest similar products.  It features filters for price, rating, and discount, along with a favorites option. The app provides fast, real-time recommendations with a clean and user-friendly interface.
 =======
@@ -315,4 +315,128 @@ This project is open source. Feel free to use and modify as needed.
 >>>>>>> 6a689bc (initial commit)
 #   K h o j o - R e c o m m e n d 
  
- 
+  -->
+
+# 🛍️ Khojo – Product Recommendation System
+
+## 📌 Overview
+
+Khojo is a machine learning-based product recommendation system designed to suggest relevant fashion items to users based on their preferences. The system analyzes product features and user behavior to provide personalized recommendations.
+
+---
+
+## 🚀 Features
+
+* 🔍 Content-based recommendation system
+* 📊 Data preprocessing and feature engineering
+* 🤖 Machine Learning model for similarity matching
+* 📈 Efficient handling of large datasets
+* 🌐 User-friendly interface (Streamlit / Web-based)
+
+---
+
+## 🛠️ Tech Stack
+
+* **Programming Language:** Python
+* **Libraries:** Pandas, NumPy, Scikit-learn
+* **Framework:** Streamlit (if used)
+* **Version Control:** Git & GitHub
+
+---
+
+## 📂 Project Structure
+
+```
+Khojo/
+│── app.py
+│── model/
+│── data/
+│── README.md
+│── requirements.txt
+```
+
+---
+
+## 📊 Dataset
+
+Due to GitHub's file size limitations (100MB), the dataset is hosted externally.
+
+🔗 Download Dataset:
+https://drive.google.com/file/d/1MNJYgDZQZxc2O-KZqdoBSdwD0hw9nkKZ/view
+
+📌 After downloading, place the file in the project directory:
+
+```
+Khojo/
+│── myntra.csv
+```
+
+---
+
+## ⚙️ Installation & Setup
+
+### 1️⃣ Clone the repository
+
+```
+git clone https://github.com/Manvi9211/KHOJO.git
+cd KHOJO
+```
+
+### 2️⃣ Install dependencies
+
+```
+pip install -r requirements.txt
+```
+
+### 3️⃣ Run the application
+
+```
+streamlit run app.py
+```
+
+---
+
+## 🧠 How It Works
+
+1. Load dataset
+2. Perform data preprocessing
+3. Convert text/features into vectors
+4. Compute similarity between products
+5. Recommend similar items to users
+
+---
+
+## 📸 Screenshots
+
+(Add screenshots of your project here)
+
+---
+
+## ⚠️ Note
+
+* The dataset is not included in this repository due to size constraints.
+* Please download it from the provided Google Drive link.
+
+---
+
+## 📌 Future Improvements
+
+* 🔥 Add collaborative filtering
+* 📱 Deploy as a web app
+* 🧠 Improve recommendation accuracy using deep learning
+* ☁️ Cloud deployment
+
+---
+
+## 👩‍💻 Author
+
+**Manvi Mishra**
+
+---
+
+## ⭐ Acknowledgements
+
+* Dataset source: Myntra dataset
+* Libraries and tools used in development
+
+---

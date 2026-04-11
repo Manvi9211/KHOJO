@@ -106,25 +106,20 @@ def load_data():
             "3. Set DATASET_URL in Streamlit secrets"
         )
         st.stop()
-        )
-            st.info(
-           "Streamlit Cloud cannot access local paths like C:/Users/... from your laptop."
-        )
-            st.stop()
-        except Exception as e:
+    except Exception as e:
         st.error(f"Error loading dataset: {str(e)}")
+        st.stop()
         st.stop()
 
 
-@ st.cache_resource
+@st.cache_resource
         def create_recommender(df):
         """Create and cache the recommendation engine."""
-        engine= RecommendationEngine(df)
+        engine = RecommendationEngine(df)
         return engine
 
-
         # Load data
-        df, stats= load_data()
+        df, stats = load_data()
 
         # Create recommender (clear cache to get latest version)
         try:
@@ -132,18 +127,17 @@ def load_data():
         except:
         pass
 
-        recommender= create_recommender(df)
+        recommender = create_recommender(df)
         FavoritesManager.initialize_session()
         SearchHistoryManager.initialize()
 
         # Initialize session state for navigation
         if 'show_favorites' not in st.session_state:
-        st.session_state.show_favorites= False
+        st.session_state.show_favorites = False
         if 'search_executed' not in st.session_state:
-        st.session_state.search_executed= False
+        st.session_state.search_executed = False
         if 'last_search' not in st.session_state:
-        st.session_state.last_search= {}
-
+        st.session_state.last_search = {}
 
         # ============================================================================
         # HEADER SECTION
@@ -160,15 +154,14 @@ def load_data():
         # with st.expander("Dataset Overview", expanded=False):
         #     display_stats_boxes(stats)
 
-
         # ============================================================================
         # SIDEBAR - PROFILE & SAVED ITEMS
         # ============================================================================
 
         with st.sidebar:
-        favorites= FavoritesManager.get_favorites()
-        db_stats= FavoritesManager.get_database_stats()
-        profile= SearchHistoryManager.get_user_style_profile()
+        favorites = FavoritesManager.get_favorites()
+        db_stats = FavoritesManager.get_database_stats()
+        profile = SearchHistoryManager.get_user_style_profile()
 
         st.markdown("---")
         st.markdown("### Your Style Profile")
@@ -191,7 +184,6 @@ def load_data():
         FavoritesManager.clear_favorites()
         st.rerun()
 
-
         # ============================================================================
         # MAIN CONTENT - NAVIGATION & SEARCH
         # ============================================================================
@@ -208,23 +200,23 @@ def load_data():
 
         if favorites:
         for idx, fav in enumerate(favorites):
-        col_image, col_info= st.columns([0.25, 0.75])
+        col_image, col_info = st.columns([0.25, 0.75])
 
             with col_image:
         if 'image' in fav and fav['image']:
-        img_url= fav['image']
+        img_url = fav['image']
                     # Add onerror handler to show placeholder if image fails to load
                     st.markdown(
-                        f'<img src="{img_url}" style="width:100%; height:auto; object-fit:cover; border-radius:6px; min-height:250px; background:#ddd;" onerror="this.src=\'https://via.placeholder.com/200x250?text=No+Image\'"/>', unsafe_allow_html = True)
+                        f'<img src="{img_url}" style="width:100%; height:auto; object-fit:cover; border-radius:6px; min-height:250px; background:#ddd;" onerror="this.src=\'https://via.placeholder.com/200x250?text=No+Image\'"/>', unsafe_allow_html=True)
                         else:
                         st.markdown(
-                        '<img src="https://via.placeholder.com/200x250?text=No+Image" style="width:100%; height:auto; border-radius:6px; min-height:250px;"/>', unsafe_allow_html = True)
+                        '<img src="https://via.placeholder.com/200x250?text=No+Image" style="width:100%; height:auto; border-radius:6px; min-height:250px;"/>', unsafe_allow_html=True)
 
                         with col_info:
                         st.markdown(f"**{fav['name'][:60]}**")
                         st.caption(f"Brand: {fav['seller'][:35]}")
 
-                        badge_html= f'<div class="badge badge-price">Price: Rs {fav["price"]:,.0f}</div>'
+                        badge_html = f'<div class="badge badge-price">Price: Rs {fav["price"]:,.0f}</div>'
                         badge_html += f'<div class="badge badge-rating">Rating: {fav["rating"]:.1f}/5</div>'
 
                         if fav.get('discount', 0) > 0:

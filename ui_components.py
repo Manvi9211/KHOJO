@@ -121,13 +121,13 @@ def display_stats_boxes(stats: dict) -> None:
             "Price Range", f"Rs {stats['price_range'][0]:,.0f} - Rs {stats['price_range'][1]:,.0f}")
 
 
-def get_main_search_filters() -> Tuple[str, float, float, float, float, str, str]:
+def get_main_search_filters() -> Tuple[str, float, float, float, float, str, str, str, str]:
     """
     Get filter values from main page with advanced options.
 
     Returns:
-        Tuple of (search_query, min_price, max_price, min_rating, min_discount, 
-                  occasion, gender)
+        Tuple of (search_query, min_price, max_price, min_rating, min_discount,
+                  occasion, gender, skin_tone, body_type)
     """
     st.markdown("### Find Your Perfect Fashion")
 
@@ -178,6 +178,19 @@ def get_main_search_filters() -> Tuple[str, float, float, float, float, str, str
             key="occasion_select"
         )
 
+        skin_tone = st.selectbox(
+            "Skin Tone Friendly",
+            options=["All", "Warm", "Cool", "Neutral", "Deep"],
+            key="skin_tone_select"
+        )
+
+        body_type = st.selectbox(
+            "Body Type",
+            options=["All", "Athletic", "Slim", "Regular",
+                     "Curvy", "Plus Size", "Petite"],
+            key="body_type_select"
+        )
+
     st.markdown("---")
 
     min_discount = st.slider(
@@ -189,7 +202,7 @@ def get_main_search_filters() -> Tuple[str, float, float, float, float, str, str
         key="discount_slider"
     )
 
-    return search_query, min_price, max_price, min_rating, min_discount, occasion, gender
+    return search_query, min_price, max_price, min_rating, min_discount, occasion, gender, skin_tone, body_type
 
 
 def display_no_results() -> None:

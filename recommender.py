@@ -4,6 +4,7 @@ Provides product recommendations based on product name searches.
 """
 
 import pandas as pd
+import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import Optional, List
@@ -48,13 +49,130 @@ class RecommendationEngine:
         # Combine text and price signals
         return (1 - weight) * sim_score + weight * price_sim
 
-    def recommend(self, product_name: str, top_n: int = 10) -> Optional[pd.DataFrame]:
+    def _category_rules(self) -> dict:
+        """Canonical product categories with positive and conflicting terms."""
+        return {
+            'shirt': {
+                'include': ['shirt', 'shirts', 'tshirt', 't-shirt', 'tee', 'tees', 'top', 'tops'],
+                'conflict': ['bra', 'bralette', 'lingerie', 'innerwear', 'panty', 'briefs']
+            },
+            'bra': {
+                'include': ['bra', 'bralette', 'sports bra', 'lingerie', 'innerwear'],
+                'conflict': ['shirt', 'tshirt', 't-shirt', 'tee', 'kurta', 'dress', 'jeans']
+            },
+            'jeans': {
+                'include': ['jean', 'jeans', 'denim'],
+                'conflict': ['bra', 'bralette', 'lingerie']
+            },
+            'kurti': {
+                'include': ['kurti', 'kurtis', 'kurta', 'kurtas'],
+                'conflict': ['bra', 'bralette', 'lingerie']
+            },
+            'dress': {
+                'include': ['dress', 'dresses', 'gown'],
+                'conflict': ['bra', 'bralette', 'lingerie']
+            },
+            'shoes': {
+                'include': ['shoe', 'shoes', 'sneaker', 'sneakers', 'footwear'],
+                'conflict': ['bra', 'bralette', 'lingerie']
+            },
+        }
+
+    def _tokenize_query(self, query: str) -> List[str]:
+        """Extract meaningful tokens from a user query."""
+        cleaned = re.sub(r"[^a-z0-9\s-]", " ", str(query).lower())
+        stop_words = {
+            'for', 'with', 'and', 'the', 'from', 'under', 'over',
+            'best', 'buy', 'new', 'latest', 'style', 'fashion'
+        }
+        return [t for t in cleaned.split() if len(t) >= 3 and t not in stop_words]
+
+    def _query_token_variants(self, token: str) -> List[str]:
+        """Return lexical variants used for strict intent matching."""
+        variants_map = {
+            'shirt': ['shirt', 'shirts', 'tshirt', 't-shirt', 'tee', 'tees'],
+            'tshirt': ['tshirt', 't-shirt', 'tee', 'tees', 'shirt', 'shirts'],
+            't-shirt': ['t-shirt', 'tshirt', 'tee', 'tees', 'shirt', 'shirts'],
+            'jean': ['jean', 'jeans', 'denim'],
+            'jeans': ['jean', 'jeans', 'denim'],
+            'bra': ['bra', 'bralette', 'sports bra'],
+            'kurta': ['kurta', 'kurtas'],
+            'kurti': ['kurti', 'kurti set', 'kurtis'],
+            'dress': ['dress', 'dresses', 'gown'],
+            'shoe': ['shoe', 'shoes', 'sneaker', 'sneakers'],
+        }
+        return variants_map.get(token, [token])
+
+    def _query_categories(self, query: str) -> List[str]:
+        """Detect which canonical categories are explicitly requested in the query."""
+        text = str(query).lower()
+        categories = []
+        for category, rules in self._category_rules().items():
+            if any(self._contains_phrase(text, term) for term in rules['include']):
+                categories.append(category)
+        return categories
+
+    def _intent_confidence(self, row: pd.Series, query: str) -> float:
+        """Score row relevance to query intent on a 0-1 scale."""
+        tokens = self._tokenize_query(query)
+        text = self._row_text_for_inference(row)
+
+        if not tokens:
+            return 1.0
+
+        # Token-level confidence
+        matched_tokens = 0
+        for token in tokens:
+            variants = self._query_token_variants(token)
+            token_match = any(
+                self._contains_phrase(text, v) or (
+                    v.replace('-', '') in text.replace('-', ''))
+                for v in variants
+            )
+            if token_match:
+                matched_tokens += 1
+
+        token_confidence = matched_tokens / max(len(tokens), 1)
+
+        # Category-level confidence for common fashion classes
+        query_categories = self._query_categories(query)
+        if not query_categories:
+            return token_confidence
+
+        rules = self._category_rules()
+        positive_match = False
+        conflict_hit = False
+
+        for cat in query_categories:
+            cat_rules = rules.get(cat, {})
+            includes = cat_rules.get('include', [])
+            conflicts = cat_rules.get('conflict', [])
+
+            if any(self._contains_phrase(text, term) for term in includes):
+                positive_match = True
+            if any(self._contains_phrase(text, term) for term in conflicts):
+                conflict_hit = True
+
+        if conflict_hit and not positive_match:
+            return 0.0
+
+        category_confidence = 1.0 if positive_match else 0.0
+
+        # Blend token and category signals, weighting category higher for precision.
+        return (0.35 * token_confidence) + (0.65 * category_confidence)
+
+    def _matches_query_intent(self, row: pd.Series, query: str) -> bool:
+        """Use confidence threshold to keep intent-aligned results."""
+        return self._intent_confidence(row, query) >= 0.55
+
+    def recommend(self, product_name: str, top_n: int = 10, preferred_gender: str = 'All') -> Optional[pd.DataFrame]:
         """
         Get product recommendations based on a search query using hybrid scoring.
 
         Args:
             product_name: Name of the product to search for
             top_n: Number of recommendations to return
+            preferred_gender: Preferred gender for selecting the query anchor
 
         Returns:
             DataFrame with recommended products or None if not found
@@ -69,8 +187,16 @@ class RecommendationEngine:
         if matches.empty:
             return None
 
-        # Get index of first match
+        # Choose a query anchor. If gender is selected, prefer a seed from that gender.
         idx = matches.index[0]
+        if preferred_gender in ['Men', 'Women', 'Unisex']:
+            inferred = matches.apply(
+                lambda row: self._infer_gender(self._row_text_for_inference(row)), axis=1
+            )
+            gender_matches = matches[inferred == preferred_gender]
+            if not gender_matches.empty:
+                idx = gender_matches.index[0]
+
         query_price = self.df.iloc[idx]['price']
 
         # Calculate TF-IDF similarity scores
@@ -95,8 +221,29 @@ class RecommendationEngine:
         product_indices = [i[0] for i in hybrid_scores]
 
         # Return results sorted by rating
-        result = self.df[['name', 'seller', 'price',
-                          'rating', 'discount', 'image']].iloc[product_indices].copy()
+        selected_cols = ['name', 'seller',
+                         'price', 'rating', 'discount', 'image']
+        if 'purl' in self.df.columns:
+            selected_cols.append('purl')
+
+        result = self.df[selected_cols].iloc[product_indices].copy()
+
+        # Keep recommendations aligned with the user's search intent using confidence.
+        result = result.copy()
+        result['intent_confidence'] = result.apply(
+            lambda row: self._intent_confidence(row, product_name), axis=1
+        )
+        intent_filtered = result[result['intent_confidence'] >= 0.55]
+
+        if intent_filtered.empty:
+            # Fallback: keep strongest intent matches if strict threshold removes all.
+            result = result.sort_values(
+                by='intent_confidence', ascending=False).head(top_n)
+        else:
+            result = intent_filtered
+
+        result = result.drop(columns=['intent_confidence'], errors='ignore')
+
         return result.sort_values(by='rating', ascending=False).reset_index(drop=True)
 
     def filter_by_price(self, dataframe: pd.DataFrame, min_price: float,
@@ -112,34 +259,45 @@ class RecommendationEngine:
         """Filter products by minimum discount."""
         return dataframe[dataframe['discount'] >= min_discount]
 
-    def _infer_gender(self, product_name: str) -> str:
+    def _contains_phrase(self, text: str, phrase: str) -> bool:
+        """Match a keyword/phrase using word boundaries to reduce false positives."""
+        parts = phrase.strip().split()
+        if not parts:
+            return False
+        pattern = r"\b" + r"\s+".join(re.escape(part)
+                                      for part in parts) + r"\b"
+        return re.search(pattern, text) is not None
+
+    def _infer_gender(self, product_text: str) -> str:
         """
         Infer gender from product name.
 
         Args:
-            product_name: Name of the product
+            product_text: Combined product text (name/url)
 
         Returns:
             'Men', 'Women', or 'Unisex'
         """
-        name_lower = product_name.lower()
+        text = product_text.lower()
 
         # Check for women indicators (expanded list)
         women_keywords = ['women', 'ladies', 'womens', 'woman', 'girl', 'girls',
                           'dress', 'saree', 'kurti', 'kurta', 'dupatta', 'pallav',
                           'lehenga', 'suit set', 'ethnic wear', 'salwar', 'kameez',
-                          'tops for women', 'shirts for women', 'tees for women',
+                          'tops for women', 'shirts for women', 'shirt for women', 'women shirt', 'women shirts', 'tees for women',
                           'palazzo', 'sharara', 'gown', 'blouse', 'bra', 'harem']
 
         # Check for men indicators (expanded list)
-        men_keywords = ['men', 'mens', 'male', 'boy', 'boys', 'shirt',
+        men_keywords = ['men', 'mens', 'male', 'boy', 'boys',
                         'dhoti', 'kurta for men', 'tshirts for men', 'shirts for men',
+                        'shirt for men', 'men shirt', 'men shirts',
                         'trousers', 'pants for men', 'traditional wear', 'waistcoat',
                         'suit for men', 'jacket for men']
 
         women_count = sum(
-            1 for keyword in women_keywords if keyword in name_lower)
-        men_count = sum(1 for keyword in men_keywords if keyword in name_lower)
+            1 for keyword in women_keywords if self._contains_phrase(text, keyword))
+        men_count = sum(
+            1 for keyword in men_keywords if self._contains_phrase(text, keyword))
 
         if women_count > men_count:
             return 'Women'
@@ -218,7 +376,9 @@ class RecommendationEngine:
             return dataframe
 
         # Infer gender for each product
-        inferred_genders = dataframe['name'].apply(self._infer_gender)
+        inferred_genders = dataframe.apply(
+            lambda row: self._infer_gender(self._row_text_for_inference(row)), axis=1
+        )
 
         if gender in ['Men', 'Women']:
             return dataframe[inferred_genders == gender]
@@ -245,6 +405,130 @@ class RecommendationEngine:
         inferred_occasions = dataframe['name'].apply(self._infer_occasion)
 
         return dataframe[inferred_occasions == occasion]
+
+    def _row_text_for_inference(self, row: pd.Series) -> str:
+        """Build text context for rule-based inference from available fields."""
+        name = str(row.get('name', ''))
+        purl = str(row.get('purl', ''))
+        return f"{name} {purl}".lower()
+
+    def _infer_skin_tone(self, product_text: str) -> str:
+        """
+        Infer skin tone suitability from color cues in product name.
+
+        Args:
+            product_text: Combined product text (name/url)
+
+        Returns:
+            'Warm', 'Cool', 'Neutral', or 'Deep'
+        """
+        text = product_text.lower()
+
+        warm_keywords = ['mustard', 'olive', 'rust', 'maroon', 'beige', 'camel',
+                         'gold', 'peach', 'coral', 'cream', 'orange', 'tan', 'ochre']
+        cool_keywords = ['blue', 'navy', 'lavender', 'purple', 'teal', 'mint',
+                         'grey', 'silver', 'violet', 'aqua', 'lilac']
+        neutral_keywords = ['black', 'white', 'brown', 'taupe',
+                            'charcoal', 'khaki', 'ivory', 'nude', 'grey melange']
+        deep_keywords = ['emerald', 'burgundy', 'wine', 'royal blue',
+                         'fuchsia', 'plum', 'cobalt', 'crimson', 'bottle green']
+
+        warm_score = sum(
+            1 for keyword in warm_keywords if keyword in text)
+        cool_score = sum(
+            1 for keyword in cool_keywords if keyword in text)
+        neutral_score = sum(
+            1 for keyword in neutral_keywords if keyword in text)
+        deep_score = sum(
+            1 for keyword in deep_keywords if keyword in text)
+
+        scores = {
+            'Warm': warm_score,
+            'Cool': cool_score,
+            'Neutral': neutral_score,
+            'Deep': deep_score,
+        }
+
+        best_match = max(scores, key=scores.get)
+        if scores[best_match] == 0:
+            return 'Neutral'
+        return best_match
+
+    def _infer_body_type(self, product_text: str) -> str:
+        """
+        Infer body type suitability from fit and silhouette keywords.
+
+        Args:
+            product_text: Combined product text (name/url)
+
+        Returns:
+            'Athletic', 'Slim', 'Curvy', 'Plus Size', 'Petite', or 'Regular'
+        """
+        text = product_text.lower()
+
+        athletic_keywords = ['athletic', 'sport', 'running', 'training', 'active',
+                             'performance', 'stretch fit', 'gym', 'workout', 'compression']
+        slim_keywords = ['slim fit', 'skinny', 'tapered', 'tailored', 'fitted']
+        curvy_keywords = ['a-line', 'flare', 'wrap',
+                          'peplum', 'fit and flare', 'empire', 'bootcut']
+        plus_size_keywords = ['plus size', 'xxl',
+                              '3xl', '4xl', 'curve', 'curvy fit', 'extended size']
+        petite_keywords = ['petite', 'cropped', 'short length', 'ankle length']
+        regular_keywords = ['regular fit', 'relaxed fit',
+                            'oversized', 'straight fit', 'straight']
+
+        if any(keyword in text for keyword in plus_size_keywords):
+            return 'Plus Size'
+        if any(keyword in text for keyword in petite_keywords):
+            return 'Petite'
+        if any(keyword in text for keyword in athletic_keywords):
+            return 'Athletic'
+        if any(keyword in text for keyword in curvy_keywords):
+            return 'Curvy'
+        if any(keyword in text for keyword in slim_keywords):
+            return 'Slim'
+        if any(keyword in text for keyword in regular_keywords):
+            return 'Regular'
+
+        return 'Regular'
+
+    def filter_by_skin_tone(self, dataframe: pd.DataFrame, skin_tone: str) -> pd.DataFrame:
+        """
+        Filter products by inferred skin tone compatibility.
+
+        Args:
+            dataframe: Products dataframe
+            skin_tone: 'Warm', 'Cool', 'Neutral', 'Deep', or 'All'
+
+        Returns:
+            Filtered dataframe
+        """
+        if skin_tone == 'All':
+            return dataframe
+
+        inferred_skin_tones = dataframe.apply(
+            lambda row: self._infer_skin_tone(self._row_text_for_inference(row)), axis=1
+        )
+        return dataframe[inferred_skin_tones == skin_tone]
+
+    def filter_by_body_type(self, dataframe: pd.DataFrame, body_type: str) -> pd.DataFrame:
+        """
+        Filter products by inferred body type fit.
+
+        Args:
+            dataframe: Products dataframe
+            body_type: 'Athletic', 'Slim', 'Curvy', 'Plus Size', 'Petite', 'Regular', or 'All'
+
+        Returns:
+            Filtered dataframe
+        """
+        if body_type == 'All':
+            return dataframe
+
+        inferred_body_types = dataframe.apply(
+            lambda row: self._infer_body_type(self._row_text_for_inference(row)), axis=1
+        )
+        return dataframe[inferred_body_types == body_type]
 
     def get_recommendation_reason(self, query_idx: int, candidate_idx: int) -> str:
         """

@@ -29,9 +29,27 @@ class DataLoader:
             # Load dataset
             self.df = pd.read_csv(self.csv_path)
 
-            # Select relevant columns with image
+            # Normalize column names to handle stray whitespace/newlines in headers
+            self.df.columns = [str(col).strip().replace(
+                '\n', '').replace('\r', '') for col in self.df.columns]
+
+            # Map common schema variants to expected names
+            if 'brand' in self.df.columns and 'seller' not in self.df.columns:
+                self.df = self.df.rename(columns={'brand': 'seller'})
+            if 'image' in self.df.columns and 'img' not in self.df.columns:
+                self.df = self.df.rename(columns={'image': 'img'})
+
+            if 'seller' not in self.df.columns:
+                # Provide a safe fallback when seller/brand is unavailable
+                self.df['seller'] = 'Unknown Brand'
+            if 'discount' not in self.df.columns:
+                self.df['discount'] = 0
+            if 'purl' not in self.df.columns:
+                self.df['purl'] = ''
+
+            # Select relevant columns with image and product URL metadata
             required_cols = ['name', 'price',
-                             'rating', 'seller', 'discount', 'img']
+                             'rating', 'seller', 'discount', 'img', 'purl']
             self.df = self.df[required_cols].copy()
 
             # Rename 'img' to 'image' for consistency
@@ -85,8 +103,12 @@ class DataLoader:
                 self.df = self.df.sample(
                     self.sample_size, random_state=42).reset_index(drop=True)
 
-            # Create features column for TF-IDF
-            self.df['features'] = self.df['name'] + " " + self.df['seller']
+            # Create features column for TF-IDF and include URL slug cues when available
+            self.df['features'] = (
+                self.df['name'].astype(str) + " " +
+                self.df['seller'].astype(str) + " " +
+                self.df['purl'].fillna('').astype(str)
+            )
 
         except FileNotFoundError:
             raise FileNotFoundError(f"Dataset file not found: {self.csv_path}")

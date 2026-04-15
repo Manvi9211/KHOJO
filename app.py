@@ -89,7 +89,26 @@ def load_data():
                 pass
 
         if csv_source is None:
-            raise FileNotFoundError("Dataset not found.")
+            error_msg = """
+            **Dataset Not Found**
+            
+            Please configure a dataset by doing ONE of the following:
+            
+            1. **Local Development**: Place `myntra202305041052.csv` or `myntra.csv` in the project root.
+            
+            2. **Streamlit Cloud Deployment**:
+               - Go to your app settings → Secrets
+               - Add: `DATASET_URL = "https://your-csv-download-url"`
+               - Example with Google Drive: 
+                 `DATASET_URL = "https://drive.google.com/uc?export=download&id=YOUR_FILE_ID"`
+            
+            3. **Environment Variable**:
+               - Set: `DATASET_URL` or `DATASET_PATH` in your system/deployment environment
+            
+            See `.streamlit/secrets.toml.example` for template setup.
+            """
+            st.error(error_msg)
+            st.stop()
 
         loader = DataLoader(csv_path=csv_source, sample_size=10000)
         return loader.get_dataframe(), loader.get_stats()

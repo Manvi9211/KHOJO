@@ -41,8 +41,11 @@ def _normalize_dataset_url(url: str) -> str:
     if 'drive.google.com/file/d/' in cleaned:
         try:
             file_id = cleaned.split('/file/d/')[1].split('/')[0]
-            return f"https://drive.google.com/uc?export=download&id={file_id}"
-        except Exception:
+            # Direct Google Drive download link
+            download_url = f"https://drive.google.com/uc?export=download&id={file_id}&confirm=t"
+            return download_url
+        except Exception as e:
+            st.warning(f"Could not parse Google Drive URL: {str(e)}")
             return cleaned
     return cleaned
 

@@ -27,7 +27,16 @@ class DataLoader:
         """Load CSV and apply all preprocessing steps."""
         try:
             # Load dataset
-            self.df = pd.read_csv(self.csv_path)
+            self.df = pd.read_csv(self.csv_path, on_bad_lines='skip', engine='python')
+
+            if self.df.empty:
+                raise ValueError(f"CSV file is empty: {self.csv_path}")
+
+            if len(self.df.columns) < 5:
+                raise ValueError(
+                    f"CSV has too few columns ({len(self.df.columns)}). "
+                    f"Expected at least 5. Columns: {list(self.df.columns)}"
+                )
 
             # Normalize column names to handle stray whitespace/newlines in headers
             self.df.columns = [str(col).strip().replace(
@@ -50,6 +59,14 @@ class DataLoader:
             # Select relevant columns with image and product URL metadata
             required_cols = ['name', 'price',
                              'rating', 'seller', 'discount', 'img', 'purl']
+            
+            missing_cols = [col for col in required_cols if col not in self.df.columns]
+            if missing_cols:
+                raise ValueError(
+                    f"Missing required columns: {missing_cols}. "
+                    f"Available columns: {list(self.df.columns)}"
+                )
+            
             self.df = self.df[required_cols].copy()
 
             # Rename 'img' to 'image' for consistency

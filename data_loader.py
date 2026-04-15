@@ -4,7 +4,49 @@ Handles CSV loading, data cleaning, and feature engineering.
 """
 
 import pandas as pd
+import os
 from typing import Optional, Tuple
+
+
+def _download_from_url(url: str, output_path: str = "temp_dataset.csv") -> str:
+    """
+    Download CSV from URL with multiple fallback strategies.
+    Returns the local path to the downloaded file.
+    """
+    import urllib.request
+    
+    # Try standard urllib first with User-Agent
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        )
+        with urllib.request.urlopen(req, timeout=30) as response:
+            with open(output_path, 'wb') as out_file:
+                out_file.write(response.read())
+        
+        file_size = os.path.getsize(output_path)
+        if file_size > 0:
+            return output_path
+    except Exception as e:
+        pass
+    
+    # Try gdown for Google Drive URLs
+    if 'drive.google.com' in url:
+        try:
+            import gdown
+            gdown.download(url, output_path, quiet=False)
+            file_size = os.path.getsize(output_path)
+            if file_size > 0:
+                return output_path
+        except Exception as e:
+            pass
+    
+    raise Exception(
+        f"Failed to download from {url}. "
+        f"Ensure the file is publicly accessible and not deleted. "
+        f"Try hosting on GitHub Releases, Kaggle, or a direct cloud storage link."
+    )
 
 
 class DataLoader:
@@ -26,8 +68,14 @@ class DataLoader:
     def load_and_process(self) -> None:
         """Load CSV and apply all preprocessing steps."""
         try:
+            # If csv_path is a URL, download it first
+            csv_to_load = self.csv_path
+            if self.csv_path.startswith('http://') or self.csv_path.startswith('https://'):
+                csv_to_load = _download_from_url(self.csv_path)
+
             # Load dataset
-            self.df = pd.read_csv(self.csv_path, on_bad_lines='skip', engine='python')
+            self.df = pd.read_csv(
+                csv_to_load, on_bad_lines='skip', engine='python')
 
             if self.df.empty:
                 raise ValueError(f"CSV file is empty: {self.csv_path}")
@@ -59,14 +107,15 @@ class DataLoader:
             # Select relevant columns with image and product URL metadata
             required_cols = ['name', 'price',
                              'rating', 'seller', 'discount', 'img', 'purl']
-            
-            missing_cols = [col for col in required_cols if col not in self.df.columns]
+
+            missing_cols = [
+                col for col in required_cols if col not in self.df.columns]
             if missing_cols:
                 raise ValueError(
                     f"Missing required columns: {missing_cols}. "
                     f"Available columns: {list(self.df.columns)}"
                 )
-            
+
             self.df = self.df[required_cols].copy()
 
             # Rename 'img' to 'image' for consistency

@@ -93,22 +93,35 @@ def load_data():
 
         if csv_source is None:
             error_msg = """
-            **Dataset Not Found**
+            **Dataset Not Found or Inaccessible**
             
-            Please configure a dataset by doing ONE of the following:
+            The app needs a fashion dataset CSV (myntra, Amazon, etc.) with columns:
+            name, price, rating, seller, discount, img, purl
             
-            1. **Local Development**: Place `myntra202305041052.csv` or `myntra.csv` in the project root.
+            ### Quick Setup Options:
             
-            2. **Streamlit Cloud Deployment**:
-               - Go to your app settings → Secrets
-               - Add: `DATASET_URL = "https://your-csv-download-url"`
-               - Example with Google Drive: 
-                 `DATASET_URL = "https://drive.google.com/uc?export=download&id=YOUR_FILE_ID"`
+            **Option 1: Google Drive (Free)**
+            1. Ensure your CSV file is set to "Anyone with link can view"
+            2. Share link should be like: `https://drive.google.com/file/d/FILE_ID/view`
+            3. Add to Streamlit Secrets: `DATASET_URL = "YOUR_SHARE_LINK"`
             
-            3. **Environment Variable**:
-               - Set: `DATASET_URL` or `DATASET_PATH` in your system/deployment environment
+            **Option 2: GitHub Releases (Free, if < 2GB)**
+            1. Upload CSV to a GitHub Release as an attachment
+            2. Copy the download URL
+            3. Add to Streamlit Secrets: `DATASET_URL = "YOUR_RELEASE_URL"`
             
-            See `.streamlit/secrets.toml.example` for template setup.
+            **Option 3: Direct HTTPS URL**
+            1. Host on any public cloud storage (AWS S3, Azure, Dropbox public link, etc.)
+            2. Get direct download URL (must not redirect or require auth)
+            3. Add to Streamlit Secrets: `DATASET_URL = "YOUR_DIRECT_URL"`
+            
+            ### Troubleshooting:
+            - ❌ File deleted or sharing disabled → Re-upload and re-share
+            - ❌ 404 error → Verify the file ID in the link is correct
+            - ❌ Empty file error → Download locally first to verify it's valid CSV
+            - ❌ Still failing → Switch to GitHub Releases or direct cloud storage
+            
+            See `.streamlit/secrets.toml.example` for examples.
             """
             st.error(error_msg)
             st.stop()
